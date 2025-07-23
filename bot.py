@@ -53,7 +53,8 @@ except Exception as e:
 
 # Состояния для ConversationHandler
 # Переименовал NAME в AGENCY_NAME для ясности, так как теперь это название турагентства
-AGENCY_NAME, EMAIL = range(2) 
+# Изменил EMAIL на PHONE_NUMBER
+AGENCY_NAME, PHONE_NUMBER = range(2)
 
 # Настройка логирования для Telegram-бота
 logging.basicConfig(
@@ -73,23 +74,24 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def agency_name_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Обрабатывает ввод названия турагентства и запрашивает email.
+    Обрабатывает ввод названия турагентства и запрашивает номер телефона.
     """
     context.user_data['agency_name'] = update.message.text # Сохраняем название турагентства
-    await update.message.reply_text("Отлично! Теперь введите ваш email.")
-    return EMAIL # Переходим в состояние EMAIL, чтобы получить email
+    # Изменил запрос на номер телефона
+    await update.message.reply_text("Отлично! Теперь введите ваш номер телефона.")
+    return PHONE_NUMBER # Переходим в состояние PHONE_NUMBER, чтобы получить номер телефона
 
-async def email_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def phone_number_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Обрабатывает ввод email и записывает данные (Название турагентства, Email, ID пользователя Telegram)
+    Обрабатывает ввод номера телефона и записывает данные (Название турагентства, Номер телефона, ID пользователя Telegram)
     в Google Sheets.
     """
-    context.user_data['email'] = update.message.text
+    context.user_data['phone_number'] = update.message.text # Сохраняем номер телефона
 
-    # Записываем данные в Google Sheets: Название турагентства, Email, ID пользователя Telegram
+    # Записываем данные в Google Sheets: Название турагентства, Номер телефона, ID пользователя Telegram
     values = [[
         context.user_data.get('agency_name'), # Используем сохраненное название турагентства
-        context.user_data.get('email'),
+        context.user_data.get('phone_number'), # Используем сохраненный номер телефона
         update.message.from_user.id  # Добавляем ID пользователя Telegram
     ]]
 
@@ -102,7 +104,7 @@ async def email_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             body=body
         ).execute()
         await update.message.reply_text("Спасибо, вы зарегистрированы!")
-        logger.info(f"Пользователь {update.message.from_user.id} успешно зарегистрирован. Агентство: {context.user_data.get('agency_name')}, Email: {context.user_data.get('email')}")
+        logger.info(f"Пользователь {update.message.from_user.id} успешно зарегистрирован. Агентство: {context.user_data.get('agency_name')}, Телефон: {context.user_data.get('phone_number')}")
     except Exception as e:
         logger.error(f"Ошибка при записи в Google Sheets: {e}")
         await update.message.reply_text("Произошла ошибка при регистрации. Пожалуйста, попробуйте еще раз.")
@@ -121,8 +123,9 @@ if __name__ == '__main__':
         entry_points=[CommandHandler('start', start)],
         states={
             # Теперь AGENCY_NAME - это первое состояние после /start
-            AGENCY_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, agency_name_handler)], 
-            EMAIL: [MessageHandler(filters.TEXT & ~filters.COMMAND, email_handler)]
+            AGENCY_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, agency_name_handler)],
+            # Изменил EMAIL на PHONE_NUMBER
+            PHONE_NUMBER: [MessageHandler(filters.TEXT & ~filters.COMMAND, phone_number_handler)]
         },
         fallbacks=[CommandHandler('cancel', cancel)]
     )
