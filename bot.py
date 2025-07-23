@@ -31,7 +31,10 @@ if not GOOGLE_CREDENTIALS_JSON:
 
 # Константы для Google Sheets
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
-RANGE_NAME = 'Sheet1!A:C'  # Диапазон для записи (измените, если нужно)
+# !!! ИСПРАВЛЕНИЕ ДИАПАЗОНА: УКАЗЫВАЕМ ТОЛЬКО ИМЯ ЛИСТА ДЛЯ ОПЕРАЦИИ APPEND !!!
+# Убедитесь, что ваш лист в Google Sheets действительно называется "Sheet1".
+# Если нет, измените "Sheet1" на точное название вашего листа (например, "Регистрации").
+RANGE_NAME = 'Sheet1'
 
 # Инициализация учетных данных для Google Sheets API
 try:
@@ -45,11 +48,12 @@ try:
 except Exception as e:
     print(f"Ошибка инициализации Google Sheets API: {e}")
     print("Убедитесь, что GOOGLE_CREDENTIALS_JSON корректно установлен и имеет корректные права доступа к таблице.")
-    # Критическая ошибка, если API не инициализирован
-    exit(1) # Завершаем выполнение скрипта, если не можем подключиться к Sheets
+    # Критическая ошибка, если API не инициализирован, завершаем выполнение скрипта
+    exit(1)
 
 # Состояния для ConversationHandler
-NAME, EMAIL = range(2)
+# Переименовал NAME в AGENCY_NAME для ясности, так как теперь это название турагентства
+AGENCY_NAME, EMAIL = range(2) 
 
 # Настройка логирования для Telegram-бота
 logging.basicConfig(
@@ -59,23 +63,32 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Начинает диалог регистрации."""
-    await update.message.reply_text("Привет! Давай зарегистрируемся. Как тебя зовут?")
-    return NAME
+    """
+    Начинает диалог регистрации с приветственным сообщением
+    и запросом названия турагентства.
+    """
+    welcome_message = "Это бот для регистрации Tripix Parser — расширения, которое помогает удобно собирать данные о турах.\nЧтобы начать, пожалуйста, введите название вашего турагентства."
+    await update.message.reply_text(welcome_message)
+    return AGENCY_NAME # Переходим в состояние AGENCY_NAME, чтобы получить название агентства
 
-async def name_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обрабатывает ввод имени пользователя."""
-    context.user_data['name'] = update.message.text
-    await update.message.reply_text("Отлично! Теперь введи свой email.")
-    return EMAIL
+async def agency_name_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Обрабатывает ввод названия турагентства и запрашивает email.
+    """
+    context.user_data['agency_name'] = update.message.text # Сохраняем название турагентства
+    await update.message.reply_text("Отлично! Теперь введите ваш email.")
+    return EMAIL # Переходим в состояние EMAIL, чтобы получить email
 
 async def email_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обрабатывает ввод email и записывает данные в Google Sheets."""
+    """
+    Обрабатывает ввод email и записывает данные (Название турагентства, Email, ID пользователя Telegram)
+    в Google Sheets.
+    """
     context.user_data['email'] = update.message.text
 
-    # Записываем данные в Google Sheets
+    # Записываем данные в Google Sheets: Название турагентства, Email, ID пользователя Telegram
     values = [[
-        context.user_data.get('name'),
+        context.user_data.get('agency_name'), # Используем сохраненное название турагентства
         context.user_data.get('email'),
         update.message.from_user.id  # Добавляем ID пользователя Telegram
     ]]
@@ -84,15 +97,15 @@ async def email_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         sheet.values().append(
             spreadsheetId=SPREADSHEET_ID,
-            range=RANGE_NAME,
+            range=RANGE_NAME, # Используем исправленный RANGE_NAME (только имя листа)
             valueInputOption='RAW',
             body=body
         ).execute()
-        await update.message.reply_text("Спасибо, ты зарегистрирован!")
-        logger.info(f"Пользователь {context.user_data.get('name')} ({update.message.from_user.id}) успешно зарегистрирован.")
+        await update.message.reply_text("Спасибо, вы зарегистрированы!")
+        logger.info(f"Пользователь {update.message.from_user.id} успешно зарегистрирован. Агентство: {context.user_data.get('agency_name')}, Email: {context.user_data.get('email')}")
     except Exception as e:
         logger.error(f"Ошибка при записи в Google Sheets: {e}")
-        await update.message.reply_text("Произошла ошибка при регистрации. Пожалуйста, попробуй еще раз.")
+        await update.message.reply_text("Произошла ошибка при регистрации. Пожалуйста, попробуйте еще раз.")
     
     return ConversationHandler.END
 
@@ -107,7 +120,8 @@ if __name__ == '__main__':
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler('start', start)],
         states={
-            NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, name_handler)],
+            # Теперь AGENCY_NAME - это первое состояние после /start
+            AGENCY_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, agency_name_handler)], 
             EMAIL: [MessageHandler(filters.TEXT & ~filters.COMMAND, email_handler)]
         },
         fallbacks=[CommandHandler('cancel', cancel)]
